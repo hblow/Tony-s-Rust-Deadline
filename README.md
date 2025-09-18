@@ -10,3 +10,7 @@ GOAL: Finish basic pong in Rust in a week, ie. by Tuesday, September 23, 2025 11
 
 Resources:
 https://www.rust-lang.org/learn/get-started
+
+
+Debugging:
+https://stackoverflow.com/a/55603112
