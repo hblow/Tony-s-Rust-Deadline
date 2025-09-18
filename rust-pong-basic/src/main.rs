@@ -3,18 +3,31 @@ use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::render::{WindowCanvas, Texture};
 use sdl2::rect::{Point, Rect};
-use sdl2::image::LoadTexture;
+use sdl2::image::{LoadTexture, LoadSurface};
+use sdl2::surface::Surface;
 use soloud::*;
 
 use std::time::Duration;
+use std::cmp;
+
+const PLAYER_MOVEMENT_SPEED: i32 = 4;
+const WINDOW_WIDTH: u32 = 800;
+const WINDOW_HEIGHT: u32 = 600;
 
 // Basic game loop, check inputs, clear screen, re render screen after updates
 // inputs -> clear -> render
-
+enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
+    None,
+}
 struct Player {
     position: Point,
     sprite: Rect,
     speed: i32,    // note in soku pong, holding shift should slow down the player so maybe I would either store the slow down speed or multiply this value by a factor to slow
+    direction: [Direction; 4],
 }
 
 fn render(
@@ -37,26 +50,71 @@ fn render(
 
     Ok(())
 }
+
+fn update_player(player: &mut Player) {
+    use self::Direction::*;
+
+    for i in 0..player.direction.len(){ 
+        match player.direction[i] {
+            Left => {
+                player.position = player.position.offset(cmp::max(-player.speed, - player.position.x() - WINDOW_WIDTH as i32 / 2), 0);
+            },
+            Right => {
+                player.position = player.position.offset(cmp::min(player.speed, WINDOW_WIDTH as i32 / 2 - player.position.x()), 0);
+            },
+            Up => {
+                player.position = player.position.offset(0, cmp::max(-player.speed, - player.position.y() - WINDOW_HEIGHT as i32 / 2));
+            },
+            Down => {
+                player.position = player.position.offset(0, cmp::min(player.speed, WINDOW_HEIGHT as i32 / 2 - player.position.y()));
+            },
+            None => {
+
+            }
+        }
+    }
+    // match player.direction {
+    //     Left => {
+    //         player.position = player.position.offset(-player.speed, 0);
+    //     },
+    //     Right => {
+    //         player.position = player.position.offset(player.speed, 0);
+    //     },
+    //     Up => {
+    //         player.position = player.position.offset(0, -player.speed2);
+    //     },
+    //     Down => {
+    //         player.position = player.position.offset(0, player.speed);
+    //     },
+    //     None => {
+
+    //     }
+    // }
+}
+
 fn main() -> Result<(), String>{
     let sdl_context = sdl2::init()?;
 
     let video_subsystem = sdl_context.video()?;
-    let window = video_subsystem.window("Pong", 800, 600)
+    let mut window = video_subsystem.window("Pong", WINDOW_WIDTH, WINDOW_HEIGHT)
         // .position_centered()
         .build()
         .expect("could not initialize video subsystem");
+    let window_icon = Surface::from_file("assets/komahappy.png")?;
+    window.set_icon(window_icon);
     let mut canvas = window.into_canvas().build().expect("could not make a canvas");
     
     canvas.set_draw_color(Color::RGB(0, 255, 255));
     canvas.clear();
     canvas.present();
-    let sl = Soloud::default().unwrap();
+    let mut sl = Soloud::default().unwrap();
 
     let mut wav = audio::Wav::default();
 
     wav.load(&std::path::Path::new("assets/Malkuth battle.ogg")).unwrap();
-
-    sl.play(&wav); // calls to play are non-blocking, so we put the thread to sleep
+    
+    let handle = sl.play(&wav); // calls to play are non-blocking, so we put the thread to sleep
+    sl.set_looping(handle, true);
 
     let texture_creator = canvas.texture_creator();
     let texture = texture_creator.load_texture("assets/okuu.png")?;
@@ -64,7 +122,8 @@ fn main() -> Result<(), String>{
         position: Point::new(0, 0),
         // src position in the spritesheet
         sprite: Rect::new(1, 85, 120, 120),
-        speed: 2,
+        speed: PLAYER_MOVEMENT_SPEED,
+        direction: [Direction::None, Direction::None, Direction::None, Direction::None],
     };
     let mut event_pump = sdl_context.event_pump()?;
     let mut i = 0;
@@ -76,17 +135,37 @@ fn main() -> Result<(), String>{
                 Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
                     break 'running;
                 },
-                Event::KeyDown { keycode: Some(Keycode::Left), .. } => {
-                    player.position = player.position.offset(-player.speed, 0);
+                Event::KeyDown { keycode: Some(Keycode::Up), repeat: false, .. } => {
+                    // player.speed2 = PLAYER_MOVEMENT_SPEED;
+                    player.direction[0] = Direction::Up;
                 },
-                Event::KeyDown { keycode: Some(Keycode::Right), .. } => {
-                    player.position = player.position.offset(player.speed, 0);
+                Event::KeyDown { keycode: Some(Keycode::Down), repeat: false, .. } => {
+                    // player.speed = PLAYER_MOVEMENT_SPEED;
+                    player.direction[1] = Direction::Down;
                 },
-                Event::KeyDown { keycode: Some(Keycode::Up), .. } => {
-                    player.position = player.position.offset(0, -player.speed);
+                Event::KeyDown { keycode: Some(Keycode::Left), repeat: false, .. } => {
+                    // player.speed = PLAYER_MOVEMENT_SPEED;
+                    player.direction[2] = Direction::Left;
                 },
-                Event::KeyDown { keycode: Some(Keycode::Down), .. } => {
-                    player.position = player.position.offset(0, player.speed);
+                Event::KeyDown { keycode: Some(Keycode::Right), repeat: false, .. } => {
+                    // player.speed = PLAYER_MOVEMENT_SPEED;
+                    player.direction[3] = Direction::Right;
+                },
+                Event::KeyUp { keycode: Some(Keycode::Up), repeat: false, .. } => {
+                    // player.speed2 = PLAYER_MOVEMENT_SPEED;
+                    player.direction[0] = Direction::None;
+                },
+                Event::KeyUp { keycode: Some(Keycode::Down), repeat: false, .. } => {
+                    // player.speed = PLAYER_MOVEMENT_SPEED;
+                    player.direction[1] = Direction::None;
+                },
+                Event::KeyUp { keycode: Some(Keycode::Left), repeat: false, .. } => {
+                    // player.speed = PLAYER_MOVEMENT_SPEED;
+                    player.direction[2] = Direction::None;
+                },
+                Event::KeyUp { keycode: Some(Keycode::Right), repeat: false, .. } => {
+                    // player.speed = PLAYER_MOVEMENT_SPEED;
+                    player.direction[3] = Direction::None;
                 },
                 _ => {}
             }
@@ -94,7 +173,7 @@ fn main() -> Result<(), String>{
 
         // Update
         i = (i + 1) % 255;
-
+        update_player(&mut player);
         // Render
         render(&mut canvas, Color::RGB(i, 64, 255 - i), &texture, &player)?;
 
