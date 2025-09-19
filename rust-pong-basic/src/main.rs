@@ -9,6 +9,7 @@ use soloud::*;
 
 use std::time::Duration;
 use std::cmp;
+use rand::Rng;
 
 const PLAYER_MOVEMENT_SPEED: i32 = 4;
 const WINDOW_WIDTH: u32 = 800;
@@ -28,12 +29,15 @@ struct Player {
     sprite: Rect,
     speed: i32,    // note in soku pong, holding shift should slow down the player so maybe I would either store the slow down speed or multiply this value by a factor to slow
     direction: [Direction; 4],
+    current_frame: i32,
 }
 
 fn render(
     canvas: &mut WindowCanvas,
     color: Color,
     texture: &Texture,
+    background: &Texture,
+    hud: &Texture,
     player: &Player,
 ) -> Result<(), String> {
     canvas.set_draw_color(color);
@@ -41,10 +45,20 @@ fn render(
 
     let (width, height) = canvas.output_size()?;
 
+    let (frame_width, frame_height) = player.sprite.size();
+    let current_frame = Rect::new(
+        player.sprite.x() + frame_width as i32 * (player.current_frame / 3),
+        player.sprite.y(),
+        frame_width,
+        frame_height,
+    );
+
     // Treat the center of the screen as the (0, 0) coordinate
     let screen_position = player.position + Point::new(width as i32 / 2, height as i32 / 2);
-    let screen_rect = Rect::from_center(screen_position, player.sprite.width(), player.sprite.height());
-    canvas.copy(texture, player.sprite, screen_rect)?;
+    let screen_rect = Rect::from_center(screen_position, frame_width, frame_height);
+    canvas.copy(background, None, None)?;
+    canvas.copy(hud, None, Rect::new(0,0,WINDOW_WIDTH,150))?;
+    canvas.copy(texture, current_frame, screen_rect)?;
 
     canvas.present();
 
@@ -73,6 +87,7 @@ fn update_player(player: &mut Player) {
             }
         }
     }
+    player.current_frame = (player.current_frame + 1)  % 12;
     // match player.direction {
     //     Left => {
     //         player.position = player.position.offset(-player.speed, 0);
@@ -103,27 +118,52 @@ fn main() -> Result<(), String>{
     let window_icon = Surface::from_file("assets/komahappy.png")?;
     window.set_icon(window_icon);
     let mut canvas = window.into_canvas().build().expect("could not make a canvas");
-    
-    canvas.set_draw_color(Color::RGB(0, 255, 255));
-    canvas.clear();
-    canvas.present();
+    let mut rng = rand::rng();
+    // canvas.set_draw_color(Color::RGB(0, 255, 255));
+    // canvas.clear();
+    // canvas.present();
     let mut sl = Soloud::default().unwrap();
 
     let mut wav = audio::Wav::default();
 
-    wav.load(&std::path::Path::new("assets/Malkuth battle.ogg")).unwrap();
+    wav.load(&std::path::Path::new("assets/Hod battle.ogg")).unwrap();
     
     let handle = sl.play(&wav); // calls to play are non-blocking, so we put the thread to sleep
     sl.set_looping(handle, true);
 
     let texture_creator = canvas.texture_creator();
-    let texture = texture_creator.load_texture("assets/okuu.png")?;
+    let okuu_surface = Surface::from_file("assets/walkcycle/walkcycle.png")?;
+    // okuu_surface.set_color_key(true, Color::RGB(0xFF, 0x00, 0xFF))?;
+    let texture = texture_creator.create_texture_from_surface(okuu_surface).unwrap();
+    let hud = texture_creator.load_texture("assets/battle_hud.png")?;
+    let bg_texture: Texture;
+    match rng.random_range(0..=2){
+        0 => {
+            bg_texture = texture_creator.load_texture("assets/backgrounds/lake.png").unwrap();
+        },
+        1 => {
+            bg_texture = texture_creator.load_texture("assets/backgrounds/dream.png").unwrap();
+        },
+        2 => {
+            bg_texture = texture_creator.load_texture("assets/backgrounds/clock.png").unwrap();
+        },
+        _ => {
+            bg_texture = texture_creator.load_texture("assets/backgrounds/order.png").unwrap();
+        },
+    }
+    // let texture = texture_creator.load_texture("assets/walkcycle/walkcycle.png")?;
+    // pub fn set_color_key(
+    //     &mut self,
+    //     enable: bool,
+    //     color: Color,
+    // ) -> Result<(), String>
     let mut player = Player {
         position: Point::new(0, 0),
         // src position in the spritesheet
-        sprite: Rect::new(1, 85, 120, 120),
+        sprite: Rect::new(0, 0, 113, 113),
         speed: PLAYER_MOVEMENT_SPEED,
         direction: [Direction::None, Direction::None, Direction::None, Direction::None],
+        current_frame: 0,
     };
     let mut event_pump = sdl_context.event_pump()?;
     let mut i = 0;
@@ -175,7 +215,7 @@ fn main() -> Result<(), String>{
         i = (i + 1) % 255;
         update_player(&mut player);
         // Render
-        render(&mut canvas, Color::RGB(i, 64, 255 - i), &texture, &player)?;
+        render(&mut canvas, Color::RGB(i, 64, 255 - i), &texture, &bg_texture, &hud, &player)?;
 
         // Time management!
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
