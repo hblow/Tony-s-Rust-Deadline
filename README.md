@@ -10,7 +10,10 @@ GOAL: Finish basic pong in Rust in a week, ie. by Tuesday, September 23, 2025 11
 
 Resources:
 https://www.rust-lang.org/learn/get-started
+https://stackoverflow.com/questions/22886500/how-to-render-text-in-sdl2
 
+Credits:
+https://www.pixiv.net/en/artworks/135316773
 
 Debugging:
 https://stackoverflow.com/a/55603112
