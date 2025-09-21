@@ -33,7 +33,7 @@ const BALL_MAX_XSPEED: i32 = 13;
 const BALL_MAX_YSPEED: i32 = 7;
 
 // Scoreboard info macros
-const WIN_CONDITIONS: u32 = 1;
+const WIN_CONDITIONS: u32 = 6;
 const SCORE_SCALE_MOD: u32 = 4;
 const SCORE_HEIGHT: u32 = 60;
 const SCORE_WIDTH: u32 = 30;
