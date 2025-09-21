@@ -2,7 +2,7 @@ use rand::rngs::ThreadRng;
 use sdl2::pixels::Color;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
-use sdl2::render::{Texture, WindowCanvas};
+use sdl2::render::{Texture, TextureCreator, WindowCanvas};
 use sdl2::rect::{Point, Rect};
 use sdl2::image::{LoadTexture, LoadSurface};
 use sdl2::surface::Surface;
@@ -33,7 +33,7 @@ const BALL_MAX_XSPEED: i32 = 13;
 const BALL_MAX_YSPEED: i32 = 7;
 
 // Scoreboard info macros
-const WIN_CONDITIONS: u32 = 6;
+const WIN_CONDITIONS: u32 = 1;
 const SCORE_SCALE_MOD: u32 = 4;
 const SCORE_HEIGHT: u32 = 60;
 const SCORE_WIDTH: u32 = 30;
@@ -77,14 +77,15 @@ struct Scoreboard {
 fn render(
     canvas: &mut WindowCanvas,
     font: &ttf::Font,
-    color: Color,
+    font_color: Color,
+    draw_color: Color,
     background: &Texture,
     scoreboard: &Scoreboard,
     player1: &Player,
     player2: &Player,
     ball: &Ball,
 ) -> Result<(), String> {
-    canvas.set_draw_color(color);
+    canvas.set_draw_color(draw_color);
     canvas.clear();
 
     let (width, height) = canvas.output_size()?;
@@ -106,21 +107,21 @@ fn render(
     canvas.copy(background, None, None)?;
     let mut text = format!("First to {}!", WIN_CONDITIONS);
     let mut rendered_text = font.render(&text);
-    let mut surface = rendered_text.solid(Color::BLACK).unwrap();
+    let mut surface = rendered_text.solid(font_color).unwrap();
     let mut text_texture = texture_creator.create_texture_from_surface(surface).unwrap();
     let mut screen_position = scoreboard.instructions_pos + Point::new(width as i32 / 2, height as i32 / 2);
     let mut draw_rect = Rect::from_center(screen_position, CONS_WIDTH, CONS_HEIGHT);
     canvas.copy(&text_texture, None, draw_rect)?;
     text = format!("{}", scoreboard.p1_score);
     rendered_text = font.render(&text);
-    surface = rendered_text.solid(Color::BLACK).unwrap();
+    surface = rendered_text.solid(font_color).unwrap();
     text_texture = texture_creator.create_texture_from_surface(surface).unwrap();
     screen_position = scoreboard.p1_s_pos + Point::new(width as i32 / 2, height as i32 / 2);
     draw_rect = Rect::from_center(screen_position, SCORE_WIDTH, SCORE_HEIGHT);
     canvas.copy(&text_texture, None, draw_rect)?;
     text = format!("{}", scoreboard.p2_score);
     rendered_text = font.render(&text);
-    surface = rendered_text.solid(Color::BLACK).unwrap();
+    surface = rendered_text.solid(font_color).unwrap();
     text_texture = texture_creator.create_texture_from_surface(surface).unwrap();
     screen_position = scoreboard.p2_s_pos + Point::new(width as i32 / 2, height as i32 / 2);
     draw_rect = Rect::from_center(screen_position, SCORE_WIDTH, SCORE_HEIGHT);
@@ -284,9 +285,41 @@ fn reset_scoreboard(scoreboard: &mut Scoreboard) {
     scoreboard.p2_score = 0;
 }
 
-// fn setup_stage(rng:&mut ThreadRng, bg: &mut Texture, wav: &mut Wav, music_player: &mut Soloud, draw_color: &mut Color) -> Handle{
+fn setup_stage<'a>(texture_creator: &'a TextureCreator<sdl2::video::WindowContext>, rng:&mut ThreadRng, bg_texture: &mut Texture<'a>, wav: &mut Wav, draw_color: &mut Color, font_color: &mut Color){
+    match rng.random_range(0..=4){
+        0 => {
+            *bg_texture = texture_creator.load_texture("assets/backgrounds/dream.png").unwrap();
+            (*wav).load(&std::path::Path::new("assets/bgm/aocf_ground_is_yellow.ogg")).unwrap();
+            *draw_color = Color::WHITE;
+            *font_color = Color::BLACK;
 
-// }
+        },
+        1 => {
+            *bg_texture = texture_creator.load_texture("assets/backgrounds/malkantkillme.png").unwrap();
+            (*wav).load(&std::path::Path::new("assets/bgm/Malkuth battle.ogg")).unwrap();
+            *draw_color = Color::WHITE;
+            *font_color = Color::WHITE;
+        },
+        2 => {
+            *bg_texture = texture_creator.load_texture("assets/backgrounds/4a.jpg").unwrap();
+            (*wav).load(&std::path::Path::new("assets/bgm/UDoALG Zanmu.ogg")).unwrap();
+            *draw_color = Color::MAGENTA;
+            *font_color = Color::MAGENTA;
+        },
+        3 => {
+            *bg_texture = texture_creator.load_texture("assets/backgrounds/pmstart.png").unwrap();
+            (*wav).load(&std::path::Path::new("assets/bgm/Traumende Madchen.ogg")).unwrap();
+            *draw_color = Color::WHITE;
+            *font_color = Color::WHITE;
+        },
+        _ => {
+            *bg_texture = texture_creator.load_texture("assets/backgrounds/order.png").unwrap();
+            (*wav).load(&std::path::Path::new("assets/bgm/VoxlbladeFloral.mp3")).unwrap();
+            *draw_color = Color::WHITE;
+            *font_color = Color::BLACK;
+        },
+    }
+}
 
 fn main() -> Result<(), String>{
     let sdl_context = sdl2::init()?;
@@ -296,53 +329,43 @@ fn main() -> Result<(), String>{
         // .position_centered()
         .build()
         .expect("could not initialize video subsystem");
-    let window_icon = Surface::from_file("assets/komahappy.png")?;
+    let window_icon = Surface::from_file("assets/misc/komahappy.png")?;
     window.set_icon(window_icon);
     let mut canvas = window.into_canvas().build().expect("could not make a canvas");
     let mut rng = rand::rng();
     let mut draw_color = Color::BLACK;
+    let mut font_color = Color::BLACK;
     // canvas.set_draw_color(Color::RGB(0, 255, 255));
     // canvas.clear();
     // canvas.present();
     let mut sl = Soloud::default().unwrap();
     let font_manager = ttf::init()?;
-    let font = font_manager.load_font("assets/CirnosFirstAlphabet.ttf", 24)?;
+    let font = font_manager.load_font("assets/misc/CirnosFirstAlphabet.ttf", 24)?;
     let mut wav = audio::Wav::default();
     let mut speech = audio::Speech::default();
     let texture_creator = canvas.texture_creator();
-    let opening = texture_creator.load_texture("assets/opener.jpg").unwrap();
+    let opening = texture_creator.load_texture("assets/misc/opener.jpg").unwrap();
     canvas.set_draw_color(Color::RGB(0, 0, 0));
     canvas.copy(&opening, None, None)?;
-    wav.load(&std::path::Path::new("assets/LIMBUSCOMPANY.ogg")).unwrap();
+    wav.load(&std::path::Path::new("assets/sfx/LIMBUSCOMPANY.ogg")).unwrap();
     canvas.present();
     sl.play(&wav); // calls to play are non-blocking, so we put the thread to sleep
     while sl.voice_count() > 0 {
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
-    wav.load(&std::path::Path::new("assets/Malkuth battle.ogg")).unwrap();
+    // wav.load(&std::path::Path::new("assets/Malkuth battle.ogg")).unwrap();
     
-    let handle = sl.play(&wav); // calls to play are non-blocking, so we put the thread to sleep
-    sl.set_looping(handle, true);
+    // let handle = sl.play(&wav); // calls to play are non-blocking, so we put the thread to sleep
+    // sl.set_looping(handle, true);
 
     // let okuu_surface = Surface::from_file("assets/walkcycle/walkcycle.png")?;
     // okuu_surface.set_color_key(true, Color::RGB(0xFF, 0x00, 0xFF))?;
     // let texture = texture_creator.create_texture_from_surface(okuu_surface).unwrap();
     // let hud = texture_creator.load_texture("assets/battle_hud.png")?;
-    let bg_texture: Texture;
-    match rng.random_range(0..=2){
-        0 => {
-            bg_texture = texture_creator.load_texture("assets/backgrounds/dream.png").unwrap();
-        },
-        1 => {
-            bg_texture = texture_creator.load_texture("assets/backgrounds/dream.png").unwrap();
-        },
-        2 => {
-            bg_texture = texture_creator.load_texture("assets/backgrounds/dream.png").unwrap();
-        },
-        _ => {
-            bg_texture = texture_creator.load_texture("assets/backgrounds/order.png").unwrap();
-        },
-    }
+    let mut bg_texture: Texture = texture_creator.load_texture("assets/backgrounds/dream.png").unwrap();
+    setup_stage(&texture_creator, &mut rng, &mut bg_texture, &mut wav, &mut draw_color, &mut font_color);
+    let mut handle = sl.play(&wav); // calls to play are non-blocking, so we put the thread to sleep
+    sl.set_looping(handle, true);
     // let texture = texture_creator.load_texture("assets/walkcycle/walkcycle.png")?;
     // pub fn set_color_key(
     //     &mut self,
@@ -493,7 +516,7 @@ fn main() -> Result<(), String>{
             }
         }
         // Render
-        render(&mut canvas, &font, draw_color, &bg_texture, &scoreboard, &player1, &player2, &ball)?;
+        render(&mut canvas, &font, font_color, draw_color, &bg_texture, &scoreboard, &player1, &player2, &ball)?;
         if scoreboard.p1_score == WIN_CONDITIONS  {
             let _ = speech.set_text("Player 1 Wins");
             sl.stop(handle);
@@ -503,7 +526,10 @@ fn main() -> Result<(), String>{
             }
             reset_positions(&mut player1, &mut player2, &mut ball);
             reset_scoreboard(&mut scoreboard);
-            render(&mut canvas, &font, draw_color, &bg_texture, &scoreboard, &player1, &player2, &ball)?;
+            setup_stage(&texture_creator, &mut rng, &mut bg_texture, &mut wav, &mut draw_color, &mut font_color);
+            handle = sl.play(&wav); // calls to play are non-blocking, so we put the thread to sleep
+            sl.set_looping(handle, true);
+            render(&mut canvas, &font, font_color, draw_color, &bg_texture, &scoreboard, &player1, &player2, &ball)?;
         } else if scoreboard.p2_score == WIN_CONDITIONS {
             let _ = speech.set_text("Player 2 Wins");
             sl.stop(handle);
@@ -513,7 +539,10 @@ fn main() -> Result<(), String>{
             }
             reset_positions(&mut player1, &mut player2, &mut ball);
             reset_scoreboard(&mut scoreboard);
-            render(&mut canvas, &font, draw_color, &bg_texture, &scoreboard, &player1, &player2, &ball)?;
+            setup_stage(&texture_creator, &mut rng, &mut bg_texture, &mut wav, &mut draw_color, &mut font_color);
+            handle = sl.play(&wav); // calls to play are non-blocking, so we put the thread to sleep
+            sl.set_looping(handle, true);
+            render(&mut canvas, &font, font_color, draw_color, &bg_texture, &scoreboard, &player1, &player2, &ball)?;
         }
 
         // Time management!
