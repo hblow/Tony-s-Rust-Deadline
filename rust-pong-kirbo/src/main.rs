@@ -6,6 +6,7 @@ use sdl2::render::{Texture, TextureCreator, WindowCanvas};
 use sdl2::rect::{Point, Rect};
 use sdl2::image::{LoadTexture, LoadSurface};
 use sdl2::surface::Surface;
+use sdl2::sys::Window;
 use sdl2::ttf;
 use soloud::*;
 
@@ -40,6 +41,8 @@ const SCORE_WIDTH: u32 = 30;
 const CONS_HEIGHT: u32 = 50;
 const CONS_WIDTH: u32 = 200;
 
+const ICON_DIM: u32 = 50;
+
 // Basic game loop, check inputs, clear screen, re render screen after updates
 // inputs -> clear -> render
 enum Direction {
@@ -49,8 +52,20 @@ enum Direction {
     Right,
     None,
 }
-struct Player {
+
+enum GameStage {
+    CharacterSelect,
+    StageSelect,
+    GameLoop,
+}
+
+struct Character<'a>  {
+    sprite: Rect,
+    texture: Texture<'a>,
+}
+struct Player<'a> {
     position: Point,
+    character: Character<'a>,
     // sprite: Rect,
     speed: i32,    // note in soku pong, holding shift should slow down the player so maybe I would either store the slow down speed or multiply this value by a factor to slow
     direction: [Direction; 4],
@@ -73,6 +88,31 @@ struct Scoreboard {
 }
 
 // struct 
+
+fn render_char_select(
+    canvas: &mut WindowCanvas,
+) -> Result<(), String> {
+    canvas.set_draw_color(Color::BLACK);
+    canvas.clear();
+    let characters = ["crash", "kirby", "parasol", "plasma"];
+    let mut filepath = format!("First to {}!", WIN_CONDITIONS);
+    let (width, height) = canvas.output_size()?;
+    let texture_creator = canvas.texture_creator();
+    let mut icon = texture_creator.load_texture("assets/characters/bandana/bandana_icon.png").unwrap();
+    let offset = (width / 5) as i32;
+    let mut screen_position = Point::new(width as i32 / 2 - (2 * offset), height as i32 / 2);
+    let mut draw_rect = Rect::from_center(screen_position, ICON_DIM, ICON_DIM);
+    canvas.copy(&icon, None, draw_rect)?;
+    for i in 0..=3{
+        filepath = format!("assets/characters/{}/{}_icon.png", characters[i], characters[i]);
+        icon = texture_creator.load_texture(filepath).unwrap();
+        screen_position = Point::new(width as i32 / 2 + ((i as i32 - 1) * offset), height as i32 / 2);
+        draw_rect = Rect::from_center(screen_position, ICON_DIM, ICON_DIM);
+        canvas.copy(&icon, None, draw_rect)?;
+    }
+    canvas.present();
+    Ok(())
+}
 
 fn render(
     canvas: &mut WindowCanvas,
@@ -107,7 +147,7 @@ fn render(
     canvas.copy(background, None, None)?;
     let mut text = format!("First to {}!", WIN_CONDITIONS);
     let mut rendered_text = font.render(&text);
-    let mut surface = rendered_text.solid(font_colo).unwrap();
+    let mut surface = rendered_text.solid(font_color).unwrap();
     let mut text_texture = texture_creator.create_texture_from_surface(surface).unwrap();
     let mut screen_position = scoreboard.instructions_pos + Point::new(width as i32 / 2, height as i32 / 2);
     let mut draw_rect = Rect::from_center(screen_position, CONS_WIDTH, CONS_HEIGHT);
@@ -289,32 +329,32 @@ fn setup_stage<'a>(texture_creator: &'a TextureCreator<sdl2::video::WindowContex
     match rng.random_range(0..=4){
         0 => {
             *bg_texture = texture_creator.load_texture("assets/backgrounds/dream.png").unwrap();
-            (*wav).load(&std::path::Path::new("assets/bgm/.ogg")).unwrap();
+            (*wav).load(&std::path::Path::new("assets/bgm/aocf_ground_is_yellow.ogg")).unwrap();
             *draw_color = Color::WHITE;
             *font_color = Color::BLACK;
 
         },
         1 => {
             *bg_texture = texture_creator.load_texture("assets/backgrounds/malkantkillme.png").unwrap();
-            (*wav).load(&std::path::Path::new("assets/bgm/.ogg")).unwrap();
+            (*wav).load(&std::path::Path::new("assets/bgm/Malkuth battle.ogg")).unwrap();
             *draw_color = Color::WHITE;
             *font_color = Color::WHITE;
         },
         2 => {
             *bg_texture = texture_creator.load_texture("assets/backgrounds/4a.jpg").unwrap();
-            (*wav).load(&std::path::Path::new("assets/bgm/.ogg")).unwrap();
+            (*wav).load(&std::path::Path::new("assets/bgm/UDoALG Zanmu.ogg")).unwrap();
             *draw_color = Color::MAGENTA;
             *font_color = Color::MAGENTA;
         },
         3 => {
             *bg_texture = texture_creator.load_texture("assets/backgrounds/pmstart.png").unwrap();
-            (*wav).load(&std::path::Path::new("assets/bgm/.ogg")).unwrap();
+            (*wav).load(&std::path::Path::new("assets/bgm/Traumende Madchen.ogg")).unwrap();
             *draw_color = Color::WHITE;
             *font_color = Color::WHITE;
         },
         _ => {
             *bg_texture = texture_creator.load_texture("assets/backgrounds/order.png").unwrap();
-            (*wav).load(&std::path::Path::new("assets/bgm/.ogg")).unwrap();
+            (*wav).load(&std::path::Path::new("assets/bgm/VoxlbladeFloral.mp3")).unwrap();
             *draw_color = Color::WHITE;
             *font_color = Color::BLACK;
         },
@@ -329,7 +369,7 @@ fn main() -> Result<(), String>{
         // .position_centered()
         .build()
         .expect("could not initialize video subsystem");
-    let window_icon = Surface::from_file("assets/misc/komahappy.png")?;
+    let window_icon = Surface::from_file("assets/misc/mascot.png")?;
     window.set_icon(window_icon);
     let mut canvas = window.into_canvas().build().expect("could not make a canvas");
     let mut rng = rand::rng();
@@ -344,12 +384,12 @@ fn main() -> Result<(), String>{
     let mut wav = audio::Wav::default();
     let mut speech = audio::Speech::default();
     let texture_creator = canvas.texture_creator();
-    let opening = texture_creator.load_texture("assets/misc/opener.jpg").unwrap();
+    let opening = texture_creator.load_texture("assets/misc/grokopener.jpg").unwrap();
     canvas.set_draw_color(Color::RGB(0, 0, 0));
     canvas.copy(&opening, None, None)?;
-    wav.load(&std::path::Path::new("assets/sfx/LIMBUSCOMPANY.ogg")).unwrap();
+    wav.load(&std::path::Path::new("assets/sfx/kirby_pawnch.mp3")).unwrap();
     canvas.present();
-    sl.play(&wav); // calls to play are non-blocking, so we put the thread to sleep
+    let mut handle = sl.play(&wav); // calls to play are non-blocking, so we put the thread to sleep
     while sl.voice_count() > 0 {
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
@@ -363,17 +403,24 @@ fn main() -> Result<(), String>{
     // let texture = texture_creator.create_texture_from_surface(okuu_surface).unwrap();
     // let hud = texture_creator.load_texture("assets/battle_hud.png")?;
     let mut bg_texture: Texture = texture_creator.load_texture("assets/backgrounds/dream.png").unwrap();
-    setup_stage(&texture_creator, &mut rng, &mut bg_texture, &mut wav, &mut draw_color, &mut font_color);
-    let handle = sl.play(&wav); // calls to play are non-blocking, so we put the thread to sleep
-    sl.set_looping(handle, true);
+    let mut p1_texture: Texture = texture_creator.load_texture("assets/backgrounds/dream.png").unwrap();
+    let mut p2_texture: Texture = texture_creator.load_texture("assets/backgrounds/dream.png").unwrap();
+    // setup_stage(&texture_creator, &mut rng, &mut bg_texture, &mut wav, &mut draw_color, &mut font_color);
+    // let mut handle = sl.play(&wav); // calls to play are non-blocking, so we put the thread to sleep
+    // sl.set_looping(handle, true);
     // let texture = texture_creator.load_texture("assets/walkcycle/walkcycle.png")?;
     // pub fn set_color_key(
     //     &mut self,
     //     enable: bool,
     //     color: Color,
     // ) -> Result<(), String>
+    // let (mut player1, mut player2) = 
     let mut player1 = Player {
         position: Point::new(-((WINDOW_WIDTH / 2 - WINDOW_WIDTH / POSITION_SCALE_MOD) as i32), 0),
+        character: Character {
+            sprite: Rect::new(0, 0, 1,1),
+            texture: p1_texture,
+        },
         // src position in the spritesheet
         // sprite: Rect::new(0, 0, 113, 113),
         speed: PLAYER_MOVEMENT_SPEED,
@@ -382,6 +429,10 @@ fn main() -> Result<(), String>{
     };
     let mut player2 = Player {
         position: Point::new((WINDOW_WIDTH / 2 - WINDOW_WIDTH / POSITION_SCALE_MOD) as i32, 0),
+        character: Character {
+            sprite: Rect::new(0, 0, 1,1),
+            texture: p2_texture,
+        },
         // src position in the spritesheet
         // sprite: Rect::new(0, 0, 113, 113),
         speed: PLAYER_MOVEMENT_SPEED,
@@ -402,6 +453,7 @@ fn main() -> Result<(), String>{
         instructions_pos:Point::new(0, (WINDOW_HEIGHT / 2 - CONS_HEIGHT / 2) as i32),
     };
     let mut event_pump = sdl_context.event_pump()?;
+    let mut current_stage = GameStage::CharacterSelect;
     'running: loop {
         // Handle events
         for event in event_pump.poll_iter() {
@@ -478,71 +530,86 @@ fn main() -> Result<(), String>{
             }
         }
 
-        // Update
-        update_player(&mut player1);
-        update_player(&mut player2);
-        match ball.direction_x {
-            Direction::Left => {
-                update_ball(&mut canvas, &mut ball, &player1);
-                if round_over(&mut ball){
-                    update_scoreboard(&ball, &mut scoreboard);
-                    let _ = speech.set_text("dammit");
-                    sl.play(&speech);
-                    reset_positions(&mut player1, &mut player2, &mut ball);
-                } else {
-                    match ball.direction_x {
-                        Direction::Right => {
-                            whack_sound(&mut rng, &mut sl, &mut speech);
-                        },
-                        _ => {}
-                    }
+        match current_stage{
+            GameStage::CharacterSelect => {
+                if sl.voice_count() == 0 {
+                    wav.load(&std::path::Path::new("assets/bgm/Bomb_Rally.mp3")).unwrap();
+                    handle = sl.play(&wav); // calls to play are non-blocking, so we put the thread to sleep
+                    // sl.set_loop_point(handle, 23.0f64);
+                    sl.set_looping(handle, true);
+                    // sl.loop_point(handle);
+                    println!("{}", sl.loop_point(handle))
                 }
+                render_char_select(&mut canvas)?;
             },
-            _ => {
-                update_ball(&mut canvas, &mut ball, &player2);
-                if round_over(&mut ball){
-                    update_scoreboard(&ball, &mut scoreboard);
-                    let _ = speech.set_text("how dare you");
-                    sl.play(&speech);
-                    reset_positions(&mut player1, &mut player2, &mut ball);
-                } else {
-                    match ball.direction_x {
-                        Direction::Left => {
-                            whack_sound(&mut rng, &mut sl, &mut speech);
-                        },
-                        _ => {}
+            _=> {
+                // Update
+                update_player(&mut player1);
+                update_player(&mut player2);
+                match ball.direction_x {
+                    Direction::Left => {
+                        update_ball(&mut canvas, &mut ball, &player1);
+                        if round_over(&mut ball){
+                            update_scoreboard(&ball, &mut scoreboard);
+                            let _ = speech.set_text("dammit");
+                            sl.play(&speech);
+                            reset_positions(&mut player1, &mut player2, &mut ball);
+                        } else {
+                            match ball.direction_x {
+                                Direction::Right => {
+                                    whack_sound(&mut rng, &mut sl, &mut speech);
+                                },
+                                _ => {}
+                            }
+                        }
+                    },
+                    _ => {
+                        update_ball(&mut canvas, &mut ball, &player2);
+                        if round_over(&mut ball){
+                            update_scoreboard(&ball, &mut scoreboard);
+                            let _ = speech.set_text("how dare you");
+                            sl.play(&speech);
+                            reset_positions(&mut player1, &mut player2, &mut ball);
+                        } else {
+                            match ball.direction_x {
+                                Direction::Left => {
+                                    whack_sound(&mut rng, &mut sl, &mut speech);
+                                },
+                                _ => {}
+                            }
+                        }
                     }
                 }
+                // Render
+                render(&mut canvas, &font, font_color, draw_color, &bg_texture, &scoreboard, &player1, &player2, &ball)?;
+                if scoreboard.p1_score == WIN_CONDITIONS  {
+                    let _ = speech.set_text("Player 1 Wins");
+                    sl.stop(handle);
+                    sl.play(&speech);
+                    while sl.voice_count() > 0 {
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                    }
+                    reset_positions(&mut player1, &mut player2, &mut ball);
+                    reset_scoreboard(&mut scoreboard);
+                    setup_stage(&texture_creator, &mut rng, &mut bg_texture, &mut wav, &mut draw_color, &mut font_color);
+                    handle = sl.play(&wav); // calls to play are non-blocking, so we put the thread to sleep
+                    sl.set_looping(handle, true);
+                    render(&mut canvas, &font, font_color, draw_color, &bg_texture, &scoreboard, &player1, &player2, &ball)?;
+                } else if scoreboard.p2_score == WIN_CONDITIONS {
+                    let _ = speech.set_text("Player 2 Wins");
+                    sl.stop(handle);
+                    sl.play(&speech);
+                    while sl.voice_count() > 0 {
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                    }
+                    reset_positions(&mut player1, &mut player2, &mut ball);
+                    reset_scoreboard(&mut scoreboard);
+                    setup_stage(&texture_creator, &mut rng, &mut bg_texture, &mut wav, &mut draw_color, &mut font_color);
+                    handle = sl.play(&wav); // calls to play are non-blocking, so we put the thread to sleep
+                    sl.set_looping(handle, true);
+                    render(&mut canvas, &font, font_color, draw_color, &bg_texture, &scoreboard, &player1, &player2, &ball)?;
+                }
             }
-        }
-        // Render
-        render(&mut canvas, &font, font_color, draw_color, &bg_texture, &scoreboard, &player1, &player2, &ball)?;
-        if scoreboard.p1_score == WIN_CONDITIONS  {
-            let _ = speech.set_text("Player 1 Wins");
-            sl.stop(handle);
-            sl.play(&speech);
-            while sl.voice_count() > 0 {
-                std::thread::sleep(std::time::Duration::from_millis(100));
-            }
-            reset_positions(&mut player1, &mut player2, &mut ball);
-            reset_scoreboard(&mut scoreboard);
-            setup_stage(&texture_creator, &mut rng, &mut bg_texture, &mut wav, &mut draw_color, &mut font_color);
-            let handle = sl.play(&wav); // calls to play are non-blocking, so we put the thread to sleep
-            sl.set_looping(handle, true);
-            render(&mut canvas, &font, font_color, draw_color, &bg_texture, &scoreboard, &player1, &player2, &ball)?;
-        } else if scoreboard.p2_score == WIN_CONDITIONS {
-            let _ = speech.set_text("Player 2 Wins");
-            sl.stop(handle);
-            sl.play(&speech);
-            while sl.voice_count() > 0 {
-                std::thread::sleep(std::time::Duration::from_millis(100));
-            }
-            reset_positions(&mut player1, &mut player2, &mut ball);
-            reset_scoreboard(&mut scoreboard);
-            setup_stage(&texture_creator, &mut rng, &mut bg_texture, &mut wav, &mut draw_color, &mut font_color);
-            let handle = sl.play(&wav); // calls to play are non-blocking, so we put the thread to sleep
-            sl.set_looping(handle, true);
-            render(&mut canvas, &font, font_color, draw_color, &bg_texture, &scoreboard, &player1, &player2, &ball)?;
         }
 
         // Time management!
