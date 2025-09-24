@@ -1,4 +1,5 @@
 use rand::rngs::ThreadRng;
+use rand::seq::index;
 use sdl2::pixels::Color;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
@@ -43,6 +44,11 @@ const CONS_WIDTH: u32 = 200;
 
 const ICON_DIM: u32 = 50;
 
+const CHAR_SELECT_BOUND: i32 = 2;
+const CHAR_COUNT: i32=5;
+const SELECTOR_OFFSET: i32 = 20;
+const CHAR_DIM: u32 = 100;
+
 // Basic game loop, check inputs, clear screen, re render screen after updates
 // inputs -> clear -> render
 enum Direction {
@@ -66,6 +72,8 @@ struct Character<'a>  {
 struct Player<'a> {
     position: Point,
     character: Character<'a>,
+    selected: bool,
+    choice_pos: i32,
     // sprite: Rect,
     speed: i32,    // note in soku pong, holding shift should slow down the player so maybe I would either store the slow down speed or multiply this value by a factor to slow
     direction: [Direction; 4],
@@ -91,24 +99,46 @@ struct Scoreboard {
 
 fn render_char_select(
     canvas: &mut WindowCanvas,
+    color: Color,
+    p1: &Player,
+    p2: &Player,
+    characters: &[&'static str],
 ) -> Result<(), String> {
-    canvas.set_draw_color(Color::BLACK);
+    canvas.set_draw_color(color);
     canvas.clear();
-    let characters = ["crash", "kirby", "parasol", "plasma"];
-    let mut filepath = format!("First to {}!", WIN_CONDITIONS);
+    let mut filepath = format!("assets/characters/{}/{}_icon.png", characters[0], characters[0]);
     let (width, height) = canvas.output_size()?;
     let texture_creator = canvas.texture_creator();
-    let mut icon = texture_creator.load_texture("assets/characters/bandana/bandana_icon.png").unwrap();
+    let mut icon = texture_creator.load_texture(filepath).unwrap();
+    let selector_texture = texture_creator.load_texture("assets/misc/select.png").unwrap();
     let offset = (width / 5) as i32;
     let mut screen_position = Point::new(width as i32 / 2 - (2 * offset), height as i32 / 2);
     let mut draw_rect = Rect::from_center(screen_position, ICON_DIM, ICON_DIM);
     canvas.copy(&icon, None, draw_rect)?;
-    for i in 0..=3{
+    let mut index_offset = 0;
+    for i in 0..=4{
+        index_offset = i as i32 - 2;
         filepath = format!("assets/characters/{}/{}_icon.png", characters[i], characters[i]);
         icon = texture_creator.load_texture(filepath).unwrap();
-        screen_position = Point::new(width as i32 / 2 + ((i as i32 - 1) * offset), height as i32 / 2);
+        screen_position = Point::new(width as i32 / 2 + (index_offset * offset), height as i32 / 2);
         draw_rect = Rect::from_center(screen_position, ICON_DIM, ICON_DIM);
         canvas.copy(&icon, None, draw_rect)?;
+        if index_offset == p1.choice_pos{
+            draw_rect = Rect::from_center(screen_position.offset(-SELECTOR_OFFSET, -SELECTOR_OFFSET), ICON_DIM, ICON_DIM);
+            canvas.copy(&selector_texture, None, draw_rect)?;
+            draw_rect = Rect::from_center(Point::new(width as i32 / 4, height as i32 / 4), CHAR_DIM, CHAR_DIM);
+            filepath = format!("assets/characters/{}/{}_select.png", characters[i], characters[i]);
+            icon = texture_creator.load_texture(filepath).unwrap();
+            canvas.copy(&icon, None, draw_rect)?;
+        }
+        if index_offset == p2.choice_pos{
+            draw_rect = Rect::from_center(screen_position.offset(SELECTOR_OFFSET, SELECTOR_OFFSET), ICON_DIM, ICON_DIM);
+            canvas.copy_ex(&selector_texture, None, draw_rect, 0.0, None, true, false)?;
+            draw_rect = Rect::from_center(Point::new(3 * width as i32 / 4, 3 * height as i32 / 4), CHAR_DIM, CHAR_DIM);
+            filepath = format!("assets/characters/{}/{}_select.png", characters[i], characters[i]);
+            icon = texture_creator.load_texture(filepath).unwrap();
+            canvas.copy(&icon, None, draw_rect)?;
+        }
     }
     canvas.present();
     Ok(())
@@ -171,35 +201,39 @@ fn render(
     screen_position = player1.position + Point::new(width as i32 / 2, height as i32 / 2);
     draw_rect = Rect::from_center(screen_position, PADDLE_WIDTH, PADDLE_HEIGHT);
     canvas.fill_rect(draw_rect)?;
+    canvas.copy(&player1.character.texture, None, Rect::from_center(screen_position.offset(-(PADDLE_WIDTH as i32), 0), 50, 50))?;
     screen_position = player2.position + Point::new(width as i32 / 2, height as i32 / 2);
     draw_rect = Rect::from_center(screen_position, PADDLE_WIDTH, PADDLE_HEIGHT);
     canvas.fill_rect(draw_rect)?;
+    canvas.copy_ex(&player2.character.texture, None, Rect::from_center(screen_position.offset((PADDLE_WIDTH as i32), 0), 50, 50), 0.0, None, true, false)?;
     screen_position = ball.position + Point::new(width as i32 / 2, height as i32 / 2);
-    draw_rect = Rect::from_center(screen_position, BALL_WIDTH,BALL_HEIGHT);
-    canvas.fill_rect(draw_rect)?;
-    // canvas.copy(hud, None, Rect::new(0,0,WINDOW_WIDTH,150))?;
+    draw_rect = Rect::from_center(screen_position, BALL_WIDTH * 3,BALL_HEIGHT * 3);
+    canvas.copy(&texture_creator.load_texture("assets/misc/ball.png").unwrap(), None, draw_rect)?;
+    // canvas.fill_rect(draw_rect)?;
+     // canvas.copy(hud, None, Rect::new(0,0,WINDOW_WIDTH,150))?;
     // canvas.copy(texture, current_frame, screen_rect)?;
     canvas.present();
 
     Ok(())
 }
 
-fn whack_sound(rng: &mut ThreadRng, music_player: &mut Soloud, speech: &mut Speech){
-    match rng.random_range(0..=3){
-        0 => {
-            let _ = speech.set_text("take this");
-        },
-        1 => {
-            let _ = speech.set_text("back at you");
-        },
-        2 => {
-            let _ = speech.set_text("how's this");
-        },
-        _ => {
-            let _ = speech.set_text("it's over");
-        },
-    }
-    music_player.play(speech);
+fn whack_sound(rng: &mut ThreadRng, music_player: &mut Soloud, wav: &mut Wav){
+    wav.load(&std::path::Path::new("assets/sfx/poyo-happy.mp3")).unwrap();
+    // match rng.random_range(0..=3){
+    //     0 => {
+    //         let _ = wav.load(&std::path::Path::new("assets/sfx/poyo-mad.mp3")).unwrap();
+    //     },
+    //     1 => {
+    //         let _ = speech.set_text("back at you");
+    //     },
+    //     2 => {
+    //         let _ = speech.set_text("how's this");
+    //     },
+    //     _ => {
+    //         let _ = speech.set_text("it's over");
+    //     },
+    // }
+    music_player.play(wav);
 }
 
 fn update_ball(canvas: &mut WindowCanvas, ball: &mut Ball, player: &Player) {
@@ -326,36 +360,42 @@ fn reset_scoreboard(scoreboard: &mut Scoreboard) {
 }
 
 fn setup_stage<'a>(texture_creator: &'a TextureCreator<sdl2::video::WindowContext>, rng:&mut ThreadRng, bg_texture: &mut Texture<'a>, wav: &mut Wav, draw_color: &mut Color, font_color: &mut Color){
-    match rng.random_range(0..=4){
+    match rng.random_range(0..=5){
         0 => {
-            *bg_texture = texture_creator.load_texture("assets/backgrounds/dream.png").unwrap();
-            (*wav).load(&std::path::Path::new("assets/bgm/aocf_ground_is_yellow.ogg")).unwrap();
-            *draw_color = Color::WHITE;
+            *bg_texture = texture_creator.load_texture("assets/backgrounds/allies.jpeg").unwrap();
+            (*wav).load(&std::path::Path::new("assets/bgm/StarAllies-FF.mp3")).unwrap();
+            *draw_color = Color::BLACK;
             *font_color = Color::BLACK;
 
         },
         1 => {
-            *bg_texture = texture_creator.load_texture("assets/backgrounds/malkantkillme.png").unwrap();
-            (*wav).load(&std::path::Path::new("assets/bgm/Malkuth battle.ogg")).unwrap();
-            *draw_color = Color::WHITE;
-            *font_color = Color::WHITE;
+            *bg_texture = texture_creator.load_texture("assets/backgrounds/aura.png").unwrap();
+            (*wav).load(&std::path::Path::new("assets/bgm/Tak-PPPP.ogg")).unwrap();
+            *draw_color = Color::BLACK;
+            *font_color = Color::BLACK;
         },
         2 => {
-            *bg_texture = texture_creator.load_texture("assets/backgrounds/4a.jpg").unwrap();
-            (*wav).load(&std::path::Path::new("assets/bgm/UDoALG Zanmu.ogg")).unwrap();
-            *draw_color = Color::MAGENTA;
-            *font_color = Color::MAGENTA;
+            *bg_texture = texture_creator.load_texture("assets/backgrounds/knife.png").unwrap();
+            (*wav).load(&std::path::Path::new("assets/bgm/StarAllies-Holy.mp3")).unwrap();
+            *draw_color = Color::BLACK;
+            *font_color = Color::BLACK;
         },
         3 => {
-            *bg_texture = texture_creator.load_texture("assets/backgrounds/pmstart.png").unwrap();
-            (*wav).load(&std::path::Path::new("assets/bgm/Traumende Madchen.ogg")).unwrap();
-            *draw_color = Color::WHITE;
-            *font_color = Color::WHITE;
+            *bg_texture = texture_creator.load_texture("assets/backgrounds/robobot.jpg").unwrap();
+            (*wav).load(&std::path::Path::new("assets/bgm/Robobot-Ordeal.ogg")).unwrap();
+            *draw_color = Color::BLACK;
+            *font_color = Color::BLACK;
+        },
+        4 => {
+            *bg_texture = texture_creator.load_texture("assets/backgrounds/yarn.jpg").unwrap();
+            (*wav).load(&std::path::Path::new("assets/bgm/EpicYarn-OuterRing.mp3")).unwrap();
+            *draw_color = Color::BLACK;
+            *font_color = Color::BLACK;
         },
         _ => {
-            *bg_texture = texture_creator.load_texture("assets/backgrounds/order.png").unwrap();
-            (*wav).load(&std::path::Path::new("assets/bgm/VoxlbladeFloral.mp3")).unwrap();
-            *draw_color = Color::WHITE;
+            *bg_texture = texture_creator.load_texture("assets/backgrounds/sad.jpg").unwrap();
+            (*wav).load(&std::path::Path::new("assets/bgm/Mili-LilyTree.mp3")).unwrap();
+            *draw_color = Color::BLACK;
             *font_color = Color::BLACK;
         },
     }
@@ -363,8 +403,9 @@ fn setup_stage<'a>(texture_creator: &'a TextureCreator<sdl2::video::WindowContex
 
 fn main() -> Result<(), String>{
     let sdl_context = sdl2::init()?;
-
+    let characters = ["bandana", "crash", "kirby", "parasol", "plasma"];
     let video_subsystem = sdl_context.video()?;
+    let mut color_grad_flag = false;
     let mut window = video_subsystem.window("Pong", WINDOW_WIDTH, WINDOW_HEIGHT)
         // .position_centered()
         .build()
@@ -380,8 +421,9 @@ fn main() -> Result<(), String>{
     // canvas.present();
     let mut sl = Soloud::default().unwrap();
     let font_manager = ttf::init()?;
-    let font = font_manager.load_font("assets/misc/CirnosFirstAlphabet.ttf", 24)?;
+    let font = font_manager.load_font("assets/misc/kirby-classic.ttf", 24)?;
     let mut wav = audio::Wav::default();
+    let mut wav2 = audio::Wav::default();
     let mut speech = audio::Speech::default();
     let texture_creator = canvas.texture_creator();
     let opening = texture_creator.load_texture("assets/misc/grokopener.jpg").unwrap();
@@ -402,9 +444,9 @@ fn main() -> Result<(), String>{
     // okuu_surface.set_color_key(true, Color::RGB(0xFF, 0x00, 0xFF))?;
     // let texture = texture_creator.create_texture_from_surface(okuu_surface).unwrap();
     // let hud = texture_creator.load_texture("assets/battle_hud.png")?;
-    let mut bg_texture: Texture = texture_creator.load_texture("assets/backgrounds/dream.png").unwrap();
-    let mut p1_texture: Texture = texture_creator.load_texture("assets/backgrounds/dream.png").unwrap();
-    let mut p2_texture: Texture = texture_creator.load_texture("assets/backgrounds/dream.png").unwrap();
+    let mut bg_texture: Texture = texture_creator.load_texture("assets/backgrounds/sad.jpg").unwrap();
+    let mut p1_texture: Texture = texture_creator.load_texture("assets/characters/kirby/kirby_icon.png").unwrap();;
+    let mut p2_texture: Texture = texture_creator.load_texture("assets/characters/kirby/kirby_icon.png").unwrap();;
     // setup_stage(&texture_creator, &mut rng, &mut bg_texture, &mut wav, &mut draw_color, &mut font_color);
     // let mut handle = sl.play(&wav); // calls to play are non-blocking, so we put the thread to sleep
     // sl.set_looping(handle, true);
@@ -421,6 +463,8 @@ fn main() -> Result<(), String>{
             sprite: Rect::new(0, 0, 1,1),
             texture: p1_texture,
         },
+        selected: false,
+        choice_pos: 0,
         // src position in the spritesheet
         // sprite: Rect::new(0, 0, 113, 113),
         speed: PLAYER_MOVEMENT_SPEED,
@@ -433,6 +477,8 @@ fn main() -> Result<(), String>{
             sprite: Rect::new(0, 0, 1,1),
             texture: p2_texture,
         },
+        selected: false,
+        choice_pos: 0,
         // src position in the spritesheet
         // sprite: Rect::new(0, 0, 113, 113),
         speed: PLAYER_MOVEMENT_SPEED,
@@ -452,9 +498,21 @@ fn main() -> Result<(), String>{
         p2_s_pos:Point::new((WINDOW_WIDTH / 2 - WINDOW_WIDTH / SCORE_SCALE_MOD) as i32, (WINDOW_HEIGHT / 2 - SCORE_HEIGHT / 2) as i32),
         instructions_pos:Point::new(0, (WINDOW_HEIGHT / 2 - CONS_HEIGHT / 2) as i32),
     };
+    let mut color_i = 0;
     let mut event_pump = sdl_context.event_pump()?;
     let mut current_stage = GameStage::CharacterSelect;
     'running: loop {
+        if !color_grad_flag{
+            color_i = (color_i + 1);
+            if color_i == 255{
+                color_grad_flag = true;
+            }
+        } else {
+            color_i = (color_i - 1);
+            if color_i == 0{
+                color_grad_flag = false;
+            }
+        }
         // Handle events
         for event in event_pump.poll_iter() {
             match event {
@@ -462,6 +520,35 @@ fn main() -> Result<(), String>{
                 Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
                     break 'running;
                 },
+                Event::KeyDown { keycode: Some(Keycode::RETURN), repeat: false, .. } => {
+                    // player.speed2 = PLAYER_MOVEMENT_SPEED;
+                    match current_stage {
+                        GameStage::CharacterSelect => {
+                            if player1.selected & player2.selected {
+                                current_stage = GameStage::StageSelect;
+                                player1.character.texture = texture_creator.load_texture( format!("assets/characters/{}/{}_select.png", characters[(player1.choice_pos + 2) as usize], characters[(player1.choice_pos + 2) as usize])).unwrap();
+                                player2.character.texture = texture_creator.load_texture( format!("assets/characters/{}/{}_select.png", characters[(player2.choice_pos + 2) as usize], characters[(player2.choice_pos + 2) as usize])).unwrap();
+                            }
+                        },
+                        _=> {}
+                    }
+                },
+                Event::KeyDown { keycode: Some(Keycode::Z), repeat: false, .. } => {
+                    // player.speed2 = PLAYER_MOVEMENT_SPEED;
+                    player1.selected = true;
+                },
+                Event::KeyDown { keycode: Some(Keycode::X), repeat: false, .. } => {
+                    // player.speed2 = PLAYER_MOVEMENT_SPEED;
+                    player1.selected = false;
+                },
+                Event::KeyDown { keycode: Some(Keycode::J), repeat: false, .. } => {
+                    // player.speed2 = PLAYER_MOVEMENT_SPEED;
+                    player2.selected = true;
+                },     
+                Event::KeyDown { keycode: Some(Keycode::K), repeat: false, .. } => {
+                    // player.speed2 = PLAYER_MOVEMENT_SPEED;
+                    player2.selected = false;
+                },     
                 Event::KeyDown { keycode: Some(Keycode::Up), repeat: false, .. } => {
                     // player.speed2 = PLAYER_MOVEMENT_SPEED;
                     player2.direction[0] = Direction::Up;
@@ -472,10 +559,16 @@ fn main() -> Result<(), String>{
                 },
                 Event::KeyDown { keycode: Some(Keycode::Left), repeat: false, .. } => {
                     // player.speed = PLAYER_MOVEMENT_SPEED;
+                    if !player2.selected {
+                        player2.choice_pos = cmp::max(player2.choice_pos - 1, -CHAR_SELECT_BOUND);
+                    }
                     player2.direction[2] = Direction::Up;
                 },
                 Event::KeyDown { keycode: Some(Keycode::Right), repeat: false, .. } => {
                     // player.speed = PLAYER_MOVEMENT_SPEED;
+                    if !player2.selected {
+                        player2.choice_pos = cmp::min(player2.choice_pos + 1, CHAR_SELECT_BOUND);
+                    }
                     player2.direction[3] = Direction::Down;
                 },
                 Event::KeyUp { keycode: Some(Keycode::Up), repeat: false, .. } => {
@@ -504,10 +597,16 @@ fn main() -> Result<(), String>{
                 },
                 Event::KeyDown { keycode: Some(Keycode::A), repeat: false, .. } => {
                     // player.speed = PLAYER_MOVEMENT_SPEED;
+                    if !player1.selected {
+                        player1.choice_pos = cmp::max(player1.choice_pos - 1, -CHAR_SELECT_BOUND);
+                    }
                     player1.direction[2] = Direction::Up;
                 },
                 Event::KeyDown { keycode: Some(Keycode::D), repeat: false, .. } => {
                     // player.speed = PLAYER_MOVEMENT_SPEED;
+                    if !player1.selected {
+                        player1.choice_pos = cmp::min(player1.choice_pos + 1, CHAR_SELECT_BOUND);
+                    }
                     player1.direction[3] = Direction::Down;
                 },
                 Event::KeyUp { keycode: Some(Keycode::W), repeat: false, .. } => {
@@ -537,11 +636,18 @@ fn main() -> Result<(), String>{
                     handle = sl.play(&wav); // calls to play are non-blocking, so we put the thread to sleep
                     // sl.set_loop_point(handle, 23.0f64);
                     sl.set_looping(handle, true);
-                    // sl.loop_point(handle);
+                    sl.loop_point(handle);
                     println!("{}", sl.loop_point(handle))
                 }
-                render_char_select(&mut canvas)?;
+                render_char_select(&mut canvas, Color::RGB(color_i, 120, 255 - color_i),&player1, &player2, &characters)?;
             },
+            GameStage::StageSelect => {
+                sl.stop(handle);
+                setup_stage(&texture_creator, &mut rng, &mut bg_texture, &mut wav, &mut draw_color, &mut font_color);
+                current_stage = GameStage::GameLoop;
+                handle = sl.play(&wav); // calls to play are non-blocking, so we put the thread to sleep
+                sl.set_looping(handle, true);
+            }
             _=> {
                 // Update
                 update_player(&mut player1);
@@ -551,13 +657,14 @@ fn main() -> Result<(), String>{
                         update_ball(&mut canvas, &mut ball, &player1);
                         if round_over(&mut ball){
                             update_scoreboard(&ball, &mut scoreboard);
-                            let _ = speech.set_text("dammit");
-                            sl.play(&speech);
+                            wav2.load(&std::path::Path::new("assets/sfx/poyo-mad.mp3")).unwrap();
+                            // let _ = speech.set_text("dammit");
+                            sl.play(&wav2);
                             reset_positions(&mut player1, &mut player2, &mut ball);
                         } else {
                             match ball.direction_x {
                                 Direction::Right => {
-                                    whack_sound(&mut rng, &mut sl, &mut speech);
+                                    whack_sound(&mut rng, &mut sl, &mut wav2);
                                 },
                                 _ => {}
                             }
@@ -567,13 +674,13 @@ fn main() -> Result<(), String>{
                         update_ball(&mut canvas, &mut ball, &player2);
                         if round_over(&mut ball){
                             update_scoreboard(&ball, &mut scoreboard);
-                            let _ = speech.set_text("how dare you");
-                            sl.play(&speech);
+                            wav2.load(&std::path::Path::new("assets/sfx/poyo-mad.mp3")).unwrap();
+                            sl.play(&wav2);
                             reset_positions(&mut player1, &mut player2, &mut ball);
                         } else {
                             match ball.direction_x {
                                 Direction::Left => {
-                                    whack_sound(&mut rng, &mut sl, &mut speech);
+                                    whack_sound(&mut rng, &mut sl, &mut wav2);
                                 },
                                 _ => {}
                             }
@@ -611,7 +718,6 @@ fn main() -> Result<(), String>{
                 }
             }
         }
-
         // Time management!
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
     }
